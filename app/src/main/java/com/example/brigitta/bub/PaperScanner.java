@@ -55,6 +55,7 @@ public class PaperScanner extends AppCompatActivity implements CameraBridgeViewB
     private Button btnStart;
     Handler handler;
     int intValue;
+    String studentID;
 
     private BaseLoaderCallback baseLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -89,7 +90,8 @@ public class PaperScanner extends AppCompatActivity implements CameraBridgeViewB
             @Override
             public void onClick(View v) {
                 Intent studentIntent = getIntent();
-                intValue = studentIntent.getIntExtra("StudentID", 0);
+                //intValue = studentIntent.getIntExtra("StudentID", 0);
+                studentID = studentIntent.getExtras().getString(Configuration.STD_ID);
 
                 runScanner = true;
             }
@@ -227,9 +229,7 @@ public class PaperScanner extends AppCompatActivity implements CameraBridgeViewB
                 Intent intent = new Intent(this, AnswerScanner.class);
                 intent.putExtra("PaperSheet", PaperCopy);
 
-                if (intValue != 0) {
-                    intent.putExtra("StudentID1", intValue);
-                }
+                intent.putExtra(Configuration.STD_ID, studentID);
 
                 startActivity(intent);
 

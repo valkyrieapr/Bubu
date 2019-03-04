@@ -10,6 +10,8 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import java.util.HashMap;
+
 public class MainActivity extends AppCompatActivity {
     Button button;
     EditText number;
@@ -27,10 +29,10 @@ public class MainActivity extends AppCompatActivity {
         button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                    int StudentID = Integer.parseInt(number.getText().toString());
-                    Intent studentIntent = new Intent(getApplicationContext(), PaperScanner.class);
-                    studentIntent.putExtra("StudentID", StudentID);
-                    startActivity(studentIntent);
+                String StudentID = number.getText().toString();
+                Intent studentIntent = new Intent(getApplicationContext(), PaperScanner.class);
+                studentIntent.putExtra(Configuration.STD_ID, StudentID);
+                startActivity(studentIntent);
 
                 //startActivity(new Intent(MainActivity.this, PaperScanner.class));
             }

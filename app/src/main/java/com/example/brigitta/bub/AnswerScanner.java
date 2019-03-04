@@ -1,9 +1,15 @@
 package com.example.brigitta.bub;
 
+import com.example.brigitta.bub.Student;
+import com.example.brigitta.bub.CustomHttpClient;
+import com.google.gson.Gson;
+
 import android.app.Activity;
+import android.app.ProgressDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
@@ -14,6 +20,9 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
@@ -25,6 +34,7 @@ import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -46,6 +56,10 @@ public class AnswerScanner extends AppCompatActivity {
     private List<Integer> answers;
     private List<Integer> correctAnswers;
     private List<MatOfPoint> bubbles;
+    private int id;
+    private String id1;
+    CustomHttpClient client;
+    String name;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -56,10 +70,13 @@ public class AnswerScanner extends AppCompatActivity {
         number = (TextView) findViewById(R.id.studentID);
 
         Intent studentIntent1 = getIntent();
-        int StudentID = studentIntent1.getIntExtra("StudentID1", 0);
 
-        number.setText("" + StudentID);
-        System.out.println(StudentID);
+        id1 = studentIntent1.getStringExtra(Configuration.STD_ID);
+
+        System.out.println("String:" + id1);
+        //number.setText("" + id);
+
+        getStudent();
 
         long PaperCopy = getIntent().getLongExtra("PaperSheet", 0);
         Mat TempPaperCopy = new Mat (PaperCopy);
@@ -120,6 +137,55 @@ public class AnswerScanner extends AppCompatActivity {
         mAdaptiveThresh.release();
 
     }
+
+    private void getStudent(){
+        class GetStudent extends AsyncTask<Void,Void,String>{
+            ProgressDialog loading;
+            @Override
+            protected void onPreExecute() {
+                super.onPreExecute();
+                //loading = ProgressDialog.show(AnswerScanner.this,"Fetching...","Wait...",false,false);
+            }
+
+            @Override
+            protected void onPostExecute(String s) {
+                super.onPostExecute(s);
+                //loading.dismiss();
+                showStudent(s);
+            }
+
+            @Override
+            protected String doInBackground(Void... params) {
+                RequestHandler rh = new RequestHandler();
+                System.out.println("doinbg:" + id1); //right
+                String s = rh.sendGetRequestParam(Configuration.URL_GET_STD, id1);
+
+                System.out.println("doinbgurl:" + s);
+                return s;
+            }
+        }
+        GetStudent ge = new GetStudent();
+        ge.execute();
+    }
+
+
+    private void showStudent(String json){
+        try {
+            System.out.println("show student json:" + json);
+            JSONObject jsonObject = new JSONObject(json);
+            JSONArray result = jsonObject.getJSONArray(Configuration.TAG_JSON_ARRAY);
+
+            System.out.println("json array:" + result);
+            JSONObject c = result.getJSONObject(0);
+            name = c.getString(Configuration.TAG_NAME);
+
+            number.setText(name);
+
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
 
     private void findBubbles(Mat PaperSheet, Mat mAdaptiveThresh) {
 
