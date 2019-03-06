@@ -1,10 +1,5 @@
 package com.example.brigitta.bub;
 
-import com.example.brigitta.bub.Student;
-import com.example.brigitta.bub.CustomHttpClient;
-import com.google.gson.Gson;
-
-import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -12,11 +7,7 @@ import android.graphics.PixelFormat;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.Toolbar;
-import android.util.Pair;
-import android.view.View;
 import android.widget.ImageView;
-import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -34,19 +25,13 @@ import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 import static org.opencv.imgproc.Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C;
-import static org.opencv.imgproc.Imgproc.ADAPTIVE_THRESH_MEAN_C;
-import static org.opencv.imgproc.Imgproc.CHAIN_APPROX_SIMPLE;
-import static org.opencv.imgproc.Imgproc.RETR_EXTERNAL;
 import static org.opencv.imgproc.Imgproc.THRESH_BINARY;
-import static org.opencv.imgproc.Imgproc.THRESH_BINARY_INV;
-import static org.opencv.imgproc.Imgproc.THRESH_OTSU;
 import static org.opencv.imgproc.Imgproc.getStructuringElement;
 
 public class AnswerScanner extends AppCompatActivity {
@@ -56,10 +41,13 @@ public class AnswerScanner extends AppCompatActivity {
     private List<Integer> answers;
     private List<Integer> correctAnswers;
     private List<MatOfPoint> bubbles;
-    private int id;
-    private String id1;
+    private String id;
     CustomHttpClient client;
     String name;
+    private String JSON_STRING;
+    public interface ResponseInterface {
+        public void getResponse(String data);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -70,11 +58,8 @@ public class AnswerScanner extends AppCompatActivity {
         number = (TextView) findViewById(R.id.studentID);
 
         Intent studentIntent1 = getIntent();
-
-        id1 = studentIntent1.getStringExtra(Configuration.STD_ID);
-
-        System.out.println("String:" + id1);
-        //number.setText("" + id);
+        id = studentIntent1.getStringExtra(Configuration.STD_ID);
+        System.out.println("String:" + id);
 
         getStudent();
 
@@ -100,27 +85,32 @@ public class AnswerScanner extends AppCompatActivity {
 
         findBubbles(PaperSheet, mAdaptiveThresh);
         findAnswers(PaperSheet, mThresh);
-        setCorrectAnswers();
 
-        for (int i = 0; i < answers.size(); i++) {
-            Integer optionIndex = answers.get(i);
-            System.out.println ((i + 1) + ". " + (optionIndex == null ? "EMPTY/INVALID" : options[optionIndex]));
-            System.out.println((i + 1) + "a: " + options[correctAnswers.get(i)]);
-        }
+        new GetAnswerKey(new ResponseInterface() {
+            @Override
+            public void getResponse(String data) {
+                for (int i = 0; i < answers.size(); i++) {
+                    Integer optionIndex = answers.get(i);
+                    System.out.println ((i + 1) + ". " + (optionIndex == null ? "NULL" : options[optionIndex]));
+                    System.out.println((i + 1) + "a: " + options[correctAnswers.get(i)]);
+                }
 
-        if (correctAnswers.size() != answers.size()) {
-            Toast.makeText(getApplicationContext(), "Number of problem doesn't match.", Toast.LENGTH_SHORT).show();
-            //error
-        }
+                if (correctAnswers.size() != answers.size()) {
+                    Toast.makeText(getApplicationContext(), "Number of problem doesn't match.", Toast.LENGTH_SHORT).show();
+                    //error
+                }
 
-        int correct = 0;
-        for (int j = 0; j < correctAnswers.size(); j++) {
-            if (answers.get(j) == correctAnswers.get(j)) {
-                correct ++;
+                int correct = 0;
+                for (int j = 0; j < correctAnswers.size(); j++) {
+                    if (answers.get(j) == correctAnswers.get(j)) {
+                        correct ++;
+                    }
+                }
+                System.out.println("Correct problems: " + correct);
+                System.out.println("Total problems: " + correctAnswers.size());
+                System.out.println("Score: " + (correct * 10 / 3));
             }
-        }
-        System.out.println("Correct problems: " + correct);
-        System.out.println("Total problems: " + correctAnswers.size());
+        }).execute();
 
         Imgproc.cvtColor(PaperSheet, PaperSheet, Imgproc.COLOR_BGR2RGB);
 
@@ -139,7 +129,8 @@ public class AnswerScanner extends AppCompatActivity {
     }
 
     private void getStudent(){
-        class GetStudent extends AsyncTask<Void,Void,String>{
+        class GetStudent extends AsyncTask<Void, Void, String> {
+
             ProgressDialog loading;
             @Override
             protected void onPreExecute() {
@@ -157,10 +148,9 @@ public class AnswerScanner extends AppCompatActivity {
             @Override
             protected String doInBackground(Void... params) {
                 RequestHandler rh = new RequestHandler();
-                System.out.println("doinbg:" + id1); //right
-                String s = rh.sendGetRequestParam(Configuration.URL_GET_STD, id1);
-
-                System.out.println("doinbgurl:" + s);
+                //System.out.println("doinbg:" + id); //right
+                String s = rh.sendGetRequestParam(Configuration.URL_GET_STD, id);
+                //System.out.println("doinbgurl:" + s);
                 return s;
             }
         }
@@ -171,11 +161,11 @@ public class AnswerScanner extends AppCompatActivity {
 
     private void showStudent(String json){
         try {
-            System.out.println("show student json:" + json);
+            //System.out.println("show student json:" + json);
             JSONObject jsonObject = new JSONObject(json);
             JSONArray result = jsonObject.getJSONArray(Configuration.TAG_JSON_ARRAY);
 
-            System.out.println("json array:" + result);
+            //System.out.println("json array:" + result);
             JSONObject c = result.getJSONObject(0);
             name = c.getString(Configuration.TAG_NAME);
 
@@ -284,39 +274,60 @@ public class AnswerScanner extends AppCompatActivity {
         answers.addAll(evens);
     }
 
-    private void setCorrectAnswers() {
-        correctAnswers = new ArrayList<>();
-        correctAnswers.add(1); //1
-        correctAnswers.add(1); //2
-        correctAnswers.add(1); //3
-        correctAnswers.add(2); //4
-        correctAnswers.add(2); //5
-        correctAnswers.add(3); //6
-        correctAnswers.add(1); //7
-        correctAnswers.add(4); //8
-        correctAnswers.add(4); //9
-        correctAnswers.add(0); //10
-        correctAnswers.add(3); //11
-        correctAnswers.add(1); //12
-        correctAnswers.add(3); //13
-        correctAnswers.add(1); //14
-        correctAnswers.add(4); //15
-        correctAnswers.add(1); //16
-        correctAnswers.add(2); //17
-        correctAnswers.add(1); //18
-        correctAnswers.add(2); //19
-        correctAnswers.add(2); //20
-        correctAnswers.add(3); //21
-        correctAnswers.add(4); //22
-        correctAnswers.add(3); //23
-        correctAnswers.add(4); //24
-        correctAnswers.add(0); //25
-        correctAnswers.add(1); //26
-        correctAnswers.add(2); //27
-        correctAnswers.add(3); //28
-        correctAnswers.add(1); //29
-        correctAnswers.add(4); //30
+    private class GetAnswerKey extends AsyncTask<Void, Void, String> {
+            private ResponseInterface responseInterface;
+
+            public GetAnswerKey(ResponseInterface responseInterface) {
+                this.responseInterface = responseInterface;
+            }
+
+            ProgressDialog loading;
+            @Override
+            protected void onPreExecute() {
+                super.onPreExecute();
+            }
+
+            @Override
+            protected void onPostExecute(String s) {
+                super.onPostExecute(s);
+                JSON_STRING = s;
+                showAnswerKey();
+                responseInterface.getResponse(s);
+                System.out.println("getResponse:" + s);
+            }
+
+            @Override
+            protected String doInBackground(Void... params) {
+                RequestHandler rh = new RequestHandler();
+                String s = rh.sendGetRequest(Configuration.URL_GET_ANSWER);
+                return s;
+            }
+        }
+
+    private void showAnswerKey () {
+        correctAnswers = new ArrayList<Integer>();
+        JSONObject jsonObject = null;
+        try {
+            jsonObject = new JSONObject(JSON_STRING);
+            JSONArray result = jsonObject.getJSONArray(Configuration.TAG_JSON_ARRAY);
+
+            for (int i = 0; i < result.length(); i++) {
+                JSONObject jo = result.getJSONObject(i);
+                int answerKey = jo.getInt(Configuration.TAG_ANSWERKEY);
+                correctAnswers.add(answerKey);
+                //System.out.println((i + 1) + "a. " + options[correctAnswers.get(i)]); //data are there
+            }
+
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
     }
+
+    /*private void setCorrectAnswers() {
+        getAnswerKey();
+        correctAnswers = new ArrayList<Integer>();
+        System.out.println(correctAnswers);
+    }*/
 
     private int[] chooseFilledCircle(int[][] rows){
 
