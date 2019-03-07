@@ -7,6 +7,9 @@ import android.graphics.PixelFormat;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -24,10 +27,12 @@ import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
+import org.w3c.dom.Text;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
 import static org.opencv.imgproc.Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C;
@@ -35,7 +40,7 @@ import static org.opencv.imgproc.Imgproc.THRESH_BINARY;
 import static org.opencv.imgproc.Imgproc.getStructuringElement;
 
 public class AnswerScanner extends AppCompatActivity {
-    TextView number;
+    TextView number; TextView score;
     private String[] options = new String[]{"A", "B", "C", "D", "E"};
     private int questionCount = 30;
     private List<Integer> answers;
@@ -43,7 +48,8 @@ public class AnswerScanner extends AppCompatActivity {
     private List<MatOfPoint> bubbles;
     private String id;
     CustomHttpClient client;
-    String name;
+    String name; String email;
+    Integer FinalScore;
     private String JSON_STRING;
     public interface ResponseInterface {
         public void getResponse(String data);
@@ -56,6 +62,7 @@ public class AnswerScanner extends AppCompatActivity {
         setContentView(R.layout.activity_answer_scanner);
 
         number = (TextView) findViewById(R.id.studentID);
+        score = (TextView) findViewById(R.id.scoreText);
 
         Intent studentIntent1 = getIntent();
         id = studentIntent1.getStringExtra(Configuration.STD_ID);
@@ -106,9 +113,14 @@ public class AnswerScanner extends AppCompatActivity {
                         correct ++;
                     }
                 }
+                FinalScore = correct * 10 / 3;
                 System.out.println("Correct problems: " + correct);
                 System.out.println("Total problems: " + correctAnswers.size());
-                System.out.println("Score: " + (correct * 10 / 3));
+                System.out.println("Score: " + FinalScore);
+
+                score.setText(String.valueOf(FinalScore));
+
+                updateScore();
             }
         }).execute();
 
@@ -120,6 +132,13 @@ public class AnswerScanner extends AppCompatActivity {
         ImageView iv = (ImageView) findViewById(R.id.imageView);
         iv.setImageBitmap(Paper);
 
+        Button button = (Button) findViewById(R.id.sendEmailbtn);
+        button.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                getStudentAllData();
+            }
+        });
+
         mErode.release();
         mGray.release();
         mBlur.release();
@@ -129,28 +148,23 @@ public class AnswerScanner extends AppCompatActivity {
     }
 
     private void getStudent(){
-        class GetStudent extends AsyncTask<Void, Void, String> {
+        class GetStudent extends AsyncTask <Void, Void, String> {
 
-            ProgressDialog loading;
             @Override
             protected void onPreExecute() {
                 super.onPreExecute();
-                //loading = ProgressDialog.show(AnswerScanner.this,"Fetching...","Wait...",false,false);
             }
 
             @Override
             protected void onPostExecute(String s) {
                 super.onPostExecute(s);
-                //loading.dismiss();
                 showStudent(s);
             }
 
             @Override
             protected String doInBackground(Void... params) {
                 RequestHandler rh = new RequestHandler();
-                //System.out.println("doinbg:" + id); //right
                 String s = rh.sendGetRequestParam(Configuration.URL_GET_STD, id);
-                //System.out.println("doinbgurl:" + s);
                 return s;
             }
         }
@@ -158,24 +172,72 @@ public class AnswerScanner extends AppCompatActivity {
         ge.execute();
     }
 
-
     private void showStudent(String json){
         try {
-            //System.out.println("show student json:" + json);
             JSONObject jsonObject = new JSONObject(json);
             JSONArray result = jsonObject.getJSONArray(Configuration.TAG_JSON_ARRAY);
 
-            //System.out.println("json array:" + result);
             JSONObject c = result.getJSONObject(0);
             name = c.getString(Configuration.TAG_NAME);
-
-            number.setText(name);
+            email = c.getString(Configuration.TAG_EMAIL);
+            if (name == "null") {
+                Toast.makeText(getApplicationContext(), "Student ID is not registered. Please try again.", Toast.LENGTH_SHORT).show();
+                finish();
+                startActivity(new Intent(this, MainActivity.class));
+            } else {
+                System.out.println("Student Name: " + name);
+                number.setText(name);
+            }
 
         } catch (JSONException e) {
             e.printStackTrace();
         }
     }
 
+    private void getStudentAllData(){
+        class GetStudentAllData extends AsyncTask <Void,Void,String> {
+            @Override
+            protected void onPreExecute() {
+                super.onPreExecute();
+            }
+
+            @Override
+            protected void onPostExecute(String s) {
+                super.onPostExecute(s);
+                showStudentAllData(s);
+                sendEmail();
+            }
+
+            @Override
+            protected String doInBackground(Void... params) {
+                RequestHandler rh = new RequestHandler();
+                String s = rh.sendGetRequestParam(Configuration.URL_GET_ALL_STD, id);
+                return s;
+            }
+        }
+        GetStudentAllData gs = new GetStudentAllData();
+        gs.execute();
+    }
+
+    private void showStudentAllData(String json){
+        try {
+            JSONObject jsonObject = new JSONObject(json);
+            JSONArray result = jsonObject.getJSONArray(Configuration.TAG_JSON_ARRAY);
+            JSONObject c = result.getJSONObject(0);
+            String id = c.getString(Configuration.TAG_ID);
+            String name = c.getString(Configuration.TAG_NAME);
+            String email = c.getString(Configuration.TAG_EMAIL);
+            String status = c.getString(Configuration.TAG_STATUS);
+            String score = c.getString(Configuration.TAG_SCORE);
+
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void sendEmail() {
+
+    }
 
     private void findBubbles(Mat PaperSheet, Mat mAdaptiveThresh) {
 
@@ -274,14 +336,13 @@ public class AnswerScanner extends AppCompatActivity {
         answers.addAll(evens);
     }
 
-    private class GetAnswerKey extends AsyncTask<Void, Void, String> {
+    private class GetAnswerKey extends AsyncTask <Void, Void, String> {
             private ResponseInterface responseInterface;
 
             public GetAnswerKey(ResponseInterface responseInterface) {
                 this.responseInterface = responseInterface;
             }
 
-            ProgressDialog loading;
             @Override
             protected void onPreExecute() {
                 super.onPreExecute();
@@ -293,7 +354,6 @@ public class AnswerScanner extends AppCompatActivity {
                 JSON_STRING = s;
                 showAnswerKey();
                 responseInterface.getResponse(s);
-                System.out.println("getResponse:" + s);
             }
 
             @Override
@@ -323,11 +383,39 @@ public class AnswerScanner extends AppCompatActivity {
         }
     }
 
-    /*private void setCorrectAnswers() {
-        getAnswerKey();
-        correctAnswers = new ArrayList<Integer>();
-        System.out.println(correctAnswers);
-    }*/
+    private void updateScore() {
+        final String score = FinalScore.toString().trim();
+
+        class UpdateScore extends AsyncTask <Void, Void, String> {
+            @Override
+            protected void onPreExecute() {
+                super.onPreExecute();
+                }
+
+            @Override
+            protected void onPostExecute(String s) {
+                super.onPostExecute(s);
+                Toast.makeText(AnswerScanner.this, s, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            protected String doInBackground(Void... params) {
+                HashMap <String, String> hashMap = new HashMap<>();
+                hashMap.put(Configuration.KEY_STD_ID, id);
+                hashMap.put(Configuration.KEY_STD_SCORE, score);
+                //System.out.println("Score:" + score);
+
+                RequestHandler rh = new RequestHandler();
+
+                String s = rh.sendPostRequest(Configuration.URL_UPDATE_SCORE, hashMap);
+
+                return s;
+            }
+        }
+
+        UpdateScore us = new UpdateScore();
+        us.execute();
+    }
 
     private int[] chooseFilledCircle(int[][] rows){
 

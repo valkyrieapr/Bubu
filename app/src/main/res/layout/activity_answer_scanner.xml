@@ -41,7 +41,7 @@
         android:layout_width="wrap_content"
         android:layout_height="15dp"
         android:layout_marginStart="24dp"
-        android:layout_marginTop="25dp"
+        android:layout_marginTop="35dp"
         android:text="Score"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textView7" />
@@ -52,7 +52,7 @@
         android:layout_height="0dp"
         android:layout_marginEnd="132dp"
         android:layout_marginStart="150dp"
-        android:layout_marginTop="25dp"
+        android:layout_marginTop="35dp"
         android:text="Status"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@+id/textView3"
@@ -67,7 +67,7 @@
         android:layout_marginTop="5dp"
         android:text="0"
         android:textSize="24sp"
-        app:layout_constraintBottom_toTopOf="@+id/button"
+        app:layout_constraintBottom_toTopOf="@+id/sendEmailbtn"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textView4" />
 
@@ -86,7 +86,7 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <Button
-        android:id="@+id/button"
+        android:id="@+id/sendEmailbtn"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
@@ -109,7 +109,7 @@
         android:layout_marginTop="8dp"
         android:text="0"
         android:textSize="24sp"
-        app:layout_constraintBottom_toTopOf="@+id/button"
+        app:layout_constraintBottom_toTopOf="@+id/sendEmailbtn"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textView3" />
 
