@@ -1,13 +1,11 @@
 package com.example.brigitta.bub;
 
-import android.app.ProgressDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
@@ -27,7 +25,6 @@ import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
-import org.w3c.dom.Text;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,6 +38,7 @@ import static org.opencv.imgproc.Imgproc.getStructuringElement;
 
 public class AnswerScanner extends AppCompatActivity {
     TextView number; TextView score;
+    Button send;
     private String[] options = new String[]{"A", "B", "C", "D", "E"};
     private int questionCount = 30;
     private List<Integer> answers;
@@ -50,6 +48,7 @@ public class AnswerScanner extends AppCompatActivity {
     CustomHttpClient client;
     String name; String email;
     Integer FinalScore;
+    String email_id, email_name, email_email, email_status, email_score;
     private String JSON_STRING;
     public interface ResponseInterface {
         public void getResponse(String data);
@@ -132,10 +131,13 @@ public class AnswerScanner extends AppCompatActivity {
         ImageView iv = (ImageView) findViewById(R.id.imageView);
         iv.setImageBitmap(Paper);
 
-        Button button = (Button) findViewById(R.id.sendEmailbtn);
-        button.setOnClickListener(new View.OnClickListener() {
+        send = (Button) findViewById(R.id.sendEmailbtn);
+        send.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 getStudentAllData();
+                Toast.makeText(getApplicationContext(), "Email sent.", Toast.LENGTH_LONG).show();
+                finish();
+                startActivity(new Intent(AnswerScanner.this, MainActivity.class));
             }
         });
 
@@ -196,17 +198,30 @@ public class AnswerScanner extends AppCompatActivity {
 
     private void getStudentAllData(){
         class GetStudentAllData extends AsyncTask <Void,Void,String> {
-            @Override
-            protected void onPreExecute() {
+        @Override
+        protected void onPreExecute() {
                 super.onPreExecute();
             }
 
-            @Override
-            protected void onPostExecute(String s) {
-                super.onPostExecute(s);
-                showStudentAllData(s);
-                sendEmail();
-            }
+        @Override
+        protected void onPostExecute(String s) {
+            super.onPostExecute(s);
+            showStudentAllData(s);
+            //System.out.println(s);
+            new Thread(new Runnable() {
+                public void run() {
+                    try {
+                        GMailSender sender = new GMailSender("testresult.thesis@Gmail.com", "Brigitta66");
+                        sender.sendMail("Test Result",
+                                "bla bla " + email_name + "/" + email_id + " bla bla bla bla " + email_status + " " + email_score + ".",
+                                "testresult.thesis@Gmail.com", email_email);
+
+                    } catch (Exception e) {
+                        Toast.makeText(getApplicationContext(),"Error", Toast.LENGTH_LONG).show();
+                    }
+                }
+            }).start();
+        }
 
             @Override
             protected String doInBackground(Void... params) {
@@ -219,24 +234,21 @@ public class AnswerScanner extends AppCompatActivity {
         gs.execute();
     }
 
+
     private void showStudentAllData(String json){
         try {
             JSONObject jsonObject = new JSONObject(json);
             JSONArray result = jsonObject.getJSONArray(Configuration.TAG_JSON_ARRAY);
             JSONObject c = result.getJSONObject(0);
-            String id = c.getString(Configuration.TAG_ID);
-            String name = c.getString(Configuration.TAG_NAME);
-            String email = c.getString(Configuration.TAG_EMAIL);
-            String status = c.getString(Configuration.TAG_STATUS);
-            String score = c.getString(Configuration.TAG_SCORE);
+            email_id = c.getString(Configuration.TAG_ID);
+            email_name = c.getString(Configuration.TAG_NAME);
+            email_email = c.getString(Configuration.TAG_EMAIL);
+            email_status = c.getString(Configuration.TAG_STATUS);
+            email_score = c.getString(Configuration.TAG_SCORE);
 
         } catch (JSONException e) {
             e.printStackTrace();
         }
-    }
-
-    private void sendEmail() {
-
     }
 
     private void findBubbles(Mat PaperSheet, Mat mAdaptiveThresh) {
