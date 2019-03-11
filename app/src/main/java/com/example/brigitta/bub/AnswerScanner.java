@@ -213,7 +213,7 @@ public class AnswerScanner extends AppCompatActivity {
                     try {
                         GMailSender sender = new GMailSender("testresult.thesis@Gmail.com", "Brigitta66");
                         sender.sendMail("Test Result",
-                                "bla bla " + email_name + "/" + email_id + " bla bla bla bla " + email_status + " " + email_score + ".",
+                                "Student Name: " + email_name + "\n" + "Student ID: " + email_id + "\n" + "Test ID: " + "...." + "\n" + "Score: " + email_score + "\n" + "Minimum Score: " + "..." + "\n" + "Status: " + email_status,
                                 "testresult.thesis@Gmail.com", email_email);
 
                     } catch (Exception e) {
