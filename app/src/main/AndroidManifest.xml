@@ -33,6 +33,10 @@
         </activity>
         <activity android:name=".PaperScanner" />
         <activity android:name=".AnswerScanner"></activity>
+
+        <meta-data android:name="com.google.android.gms.vision.DEPENDENCIES"
+            android:value="barcode"></meta-data>
+
     </application>
 
     <uses-permission android:name="android.permission.INTERNET" />

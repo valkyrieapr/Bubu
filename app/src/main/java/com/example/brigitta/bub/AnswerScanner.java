@@ -20,6 +20,7 @@ import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint;
+import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
@@ -31,24 +32,31 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import static org.opencv.core.CvType.CV_8UC1;
 import static org.opencv.imgproc.Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C;
 import static org.opencv.imgproc.Imgproc.THRESH_BINARY;
+import static org.opencv.imgproc.Imgproc.approxPolyDP;
+import static org.opencv.imgproc.Imgproc.arcLength;
+import static org.opencv.imgproc.Imgproc.boundingRect;
 import static org.opencv.imgproc.Imgproc.getStructuringElement;
 
 public class AnswerScanner extends AppCompatActivity {
-    TextView number; TextView score;
-    Button send;
+    TextView number; TextView score; Button send;
     private String[] options = new String[]{"A", "B", "C", "D", "E"};
     private int questionCount = 30;
-    private List<Integer> answers;
-    private List<Integer> correctAnswers;
-    private List<MatOfPoint> bubbles;
+
+    private Rect roi;
+    private List<Integer> answers, correctAnswers;
+    private List<MatOfPoint> bubbles, contours;
+    private Mat PaperSheet, hierarchy;
+    private Mat dilated, gray, thresh, blur, canny, adaptiveThresh;
+    private Mat mErode, mGray, mBlur, mThresh, mAdaptiveThresh;
     private String id;
-    CustomHttpClient client;
-    String name; String email;
+
+    String name, email, email_id, email_name, email_email, email_status, email_score;
     Integer FinalScore;
-    String email_id, email_name, email_email, email_status, email_score;
     private String JSON_STRING;
     public interface ResponseInterface {
         public void getResponse(String data);
@@ -71,26 +79,45 @@ public class AnswerScanner extends AppCompatActivity {
 
         long PaperCopy = getIntent().getLongExtra("PaperSheet", 0);
         Mat TempPaperCopy = new Mat (PaperCopy);
-        Mat PaperSheet = TempPaperCopy.clone();
+        PaperSheet = TempPaperCopy.clone();
 
-        Mat mErode = new Mat();
-        Mat mGray = new Mat();
-        Mat mBlur = new Mat();
-        Mat mThresh = new Mat();
-        Mat mAdaptiveThresh = new Mat();
-
+        mErode = new Mat();
         Imgproc.erode(PaperSheet, mErode, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, 1)));
+        mGray = new Mat();
         Imgproc.cvtColor(mErode, mGray, Imgproc.COLOR_BGR2GRAY);
+        mBlur = new Mat();
         Imgproc.blur(mGray, mBlur, new Size(5, 5));
+        mThresh = new Mat();
         Imgproc.threshold(mGray, mThresh, 140, 255, THRESH_BINARY);
+        mAdaptiveThresh = new Mat();
         Imgproc.adaptiveThreshold(mBlur, mAdaptiveThresh, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 11, 2);
 
+        //for finding parent rectangle
+        dilated = new Mat(PaperSheet.size(), CV_8UC1);
+        Imgproc.dilate(PaperSheet, dilated, getStructuringElement(Imgproc.MORPH_RECT, new Size(3, 3)));
+        gray = new Mat(dilated.size(), CV_8UC1);
+        Imgproc.cvtColor(dilated, gray, Imgproc.COLOR_BGR2GRAY);
+        thresh = new Mat(gray.rows(), gray.cols(), gray.type());
+        Imgproc.threshold(gray, thresh, 150, 255, THRESH_BINARY);
+        blur = new Mat(gray.size(), CV_8UC1);
+        Imgproc.blur(gray, blur, new Size(5., 5.));
+        canny = new Mat(blur.size(), CV_8UC1);
+        Imgproc.Canny(blur, canny, 160, 20);
+        adaptiveThresh = new Mat(canny.rows(), gray.cols(), gray.type());
+        Imgproc.adaptiveThreshold(canny, adaptiveThresh, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 11, 2);
+
+        hierarchy = new Mat();
+        System.out.println("first:" + hierarchy);
+        contours = new ArrayList<>();
         correctAnswers = new ArrayList<>();
         answers = new ArrayList<>();
         bubbles = new ArrayList<>();
 
-        findBubbles(PaperSheet, mAdaptiveThresh);
-        findAnswers(PaperSheet, mThresh);
+        findParentRectangle();
+
+        findBubbles();
+
+        findAnswers();
 
         new GetAnswerKey(new ResponseInterface() {
             @Override
@@ -147,6 +174,13 @@ public class AnswerScanner extends AppCompatActivity {
         mThresh.release();
         mAdaptiveThresh.release();
 
+        dilated.release();
+        gray.release();
+        thresh.release();
+        blur.release();
+        canny.release();
+        adaptiveThresh.release();
+
     }
 
     private void getStudent(){
@@ -198,30 +232,30 @@ public class AnswerScanner extends AppCompatActivity {
 
     private void getStudentAllData(){
         class GetStudentAllData extends AsyncTask <Void,Void,String> {
-        @Override
-        protected void onPreExecute() {
+            @Override
+            protected void onPreExecute() {
                 super.onPreExecute();
             }
 
-        @Override
-        protected void onPostExecute(String s) {
-            super.onPostExecute(s);
-            showStudentAllData(s);
-            //System.out.println(s);
-            new Thread(new Runnable() {
-                public void run() {
-                    try {
-                        GMailSender sender = new GMailSender("testresult.thesis@Gmail.com", "Brigitta66");
-                        sender.sendMail("Test Result",
-                                "Student Name: " + email_name + "\n" + "Student ID: " + email_id + "\n" + "Test ID: " + "...." + "\n" + "Score: " + email_score + "\n" + "Minimum Score: " + "..." + "\n" + "Status: " + email_status,
-                                "testresult.thesis@Gmail.com", email_email);
+            @Override
+            protected void onPostExecute(String s) {
+                super.onPostExecute(s);
+                showStudentAllData(s);
+                //System.out.println(s);
+                new Thread(new Runnable() {
+                    public void run() {
+                        try {
+                            GMailSender sender = new GMailSender("testresult.thesis@Gmail.com", "Brigitta66");
+                            sender.sendMail("Test Result",
+                                    "Student Name: " + email_name + "\n" + "Student ID: " + email_id + "\n" + "Test ID: " + "...." + "\n" + "Score: " + email_score + "\n" + "Minimum Score: " + "..." + "\n" + "Status: " + email_status,
+                                    "testresult.thesis@Gmail.com", email_email);
 
-                    } catch (Exception e) {
-                        Toast.makeText(getApplicationContext(),"Error", Toast.LENGTH_LONG).show();
+                        } catch (Exception e) {
+                            Toast.makeText(getApplicationContext(),"Error", Toast.LENGTH_LONG).show();
+                        }
                     }
-                }
-            }).start();
-        }
+                }).start();
+            }
 
             @Override
             protected String doInBackground(Void... params) {
@@ -251,16 +285,89 @@ public class AnswerScanner extends AppCompatActivity {
         }
     }
 
-    private void findBubbles(Mat PaperSheet, Mat mAdaptiveThresh) {
+    private void findParentRectangle() {
 
-        List<MatOfPoint> contours = new ArrayList<>();
-        Imgproc.findContours(mAdaptiveThresh, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
+        Imgproc.findContours(adaptiveThresh, contours, hierarchy, Imgproc.RETR_TREE, Imgproc.CHAIN_APPROX_SIMPLE);
+
+        System.out.println ("getParentRectangle > hierarchy data:\n" + hierarchy.dump());
+
+        // find rectangles
+        HashMap<Double, MatOfPoint> rectangles = new HashMap<>();
+        for(int i = 0; i < contours.size(); i++) {
+            MatOfPoint2f approxCurve = new MatOfPoint2f( contours.get(i).toArray() );
+            Imgproc.approxPolyDP(approxCurve, approxCurve, 0.02 * arcLength(approxCurve, true), true);
+
+            if(approxCurve.toArray().length == 4){
+                rectangles.put((double) i, contours.get(i));
+            }
+        }
+
+        //System.out.println ("getParentRectangle > contours.size: " + contours.size());
+       // System.out.println ("getParentRectangle > rectangles.size: " + rectangles.size());
+
+        //find rectangle done with approxPolyDP
+        int parentIndex = -1;
+
+        // choose hierarchical rectangle which is our main wrapper rect
+        for (Map.Entry <Double, MatOfPoint> rectangle : rectangles.entrySet()) {
+            double index = rectangle.getKey();
+
+            double[] ids = hierarchy.get(0, (int) index);
+            double nextId = ids[0];
+            double previousId = ids[1];
+
+            if (nextId != -1 && previousId != -1) continue;
+
+            int k = (int) index;
+            int c = 0;
+
+            while (hierarchy.get(0, k)[2] != -1) {
+                k = (int) hierarchy.get(0, k)[2];
+                c++;
+            }
+
+            if(hierarchy.get(0, k)[2] != -1) c++;
+
+            if (c >= 3){
+                parentIndex = (int) index;
+            }
+
+            //System.out.println ("getParentRectangle > index: " + index + ", c: " + c);
+
+        }
+
+        //System.out.println ("getParentRectangle > parentIndex: " + parentIndex);
+
+        if(parentIndex < 0){
+            Toast.makeText(getApplicationContext(), "Couldn't capture main wrapper", Toast.LENGTH_SHORT).show();
+        }
+
+        roi = Imgproc.boundingRect(contours.get(parentIndex));
+
+        System.out.println ("getParentRectangle > original roi.x: " + roi.x + ", roi.y: " + roi.y);
+        System.out.println ("getParentRectangle > original roi.width: " + roi.width + ", roi.height: " + roi.height);
+
+        int padding = 30;
+
+        roi.x += padding;
+        roi.y += padding;
+        roi.width -= 2 * padding;
+        roi.height -= 2 * padding;
+
+        //Imgproc.rectangle(PaperSheet, new Point(roi.x, roi.y), new Point(roi.x + roi.width,roi.y + roi.height), new Scalar(0, 0, 0), 2);
+    }
+
+    private void findBubbles() {
+
+        contours.clear();
+
+        Imgproc.findContours(mAdaptiveThresh.submat(roi), contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
 
         List<MatOfPoint> drafts = new ArrayList<>();
         //To determine which regions of the image are bubbles, we first loop over each of the individual contours.
         for (MatOfPoint contour : contours) {
             //Compute the bounding box of the contour, then use the bounding box to derive the aspect ratio
-            Rect box = Imgproc.boundingRect(contour);
+            Rect box = boundingRect(contour);
             int w = box.width;
             int h = box.height;
             double ratio = Math.max(w, h) / Math.min(w, h);
@@ -271,7 +378,7 @@ public class AnswerScanner extends AppCompatActivity {
             //As long as these checks hold, we can update our drafts list and mark the region as a bubble.
 
             if (ratio >= 0.9 && ratio <= 1.1) {
-                if (Math.max(w, h) < 30 && Math.min(w, h) > 20) {
+                if(Math.max(w, h) < 30 && Math.min(w, h) > 20){
                     drafts.add(contour);
                     //Imgproc.drawContours(PaperSheet, contours, contours.indexOf(contour), new Scalar(0, 0, 255), 1);
                 }
@@ -302,7 +409,7 @@ public class AnswerScanner extends AppCompatActivity {
     //Given a row of bubbles, the next step is to determine which bubble is filled in.
     //We can accomplish this by using our thresh image and counting the number of non-zero pixels (i.e., foreground pixels) in each bubble region:
 
-    private void findAnswers(Mat PaperSheet, Mat mThresh) {
+    private void findAnswers() {
 
         for (int i = 0; i < bubbles.size(); i += options.length) {
             List<MatOfPoint> rows = bubbles.subList(i, i + options.length);
@@ -315,11 +422,11 @@ public class AnswerScanner extends AppCompatActivity {
                 List<MatOfPoint> list = Arrays.asList(col);
 
                 //Construct a mask that reveals only the current "bubble" for the question
-                Mat mask = new Mat(mThresh.size(), CvType.CV_8UC1);
-                Imgproc.drawContours(mask, list, -1, new Scalar(255, 0, 0), -1);
+                Mat mask = new Mat(mThresh.size(), CV_8UC1);
+                Imgproc.drawContours(mask.submat(roi), list, -1, new Scalar(255, 0, 0), -1);
 
                 //Apply the mask to the thresholded image, then count the number of non-zero pixels in the bubble area.
-                Mat conjuction = new Mat(mThresh.size(), CvType.CV_8UC1);
+                Mat conjuction = new Mat(mThresh.size(), CV_8UC1);
                 Core.bitwise_and(mThresh, mask, conjuction); //countNonZero counts black pixel in the mask
 
                 int countNonZero = Core.countNonZero(conjuction);
@@ -329,7 +436,7 @@ public class AnswerScanner extends AppCompatActivity {
             int[] selection = chooseFilledCircle(filled);
 
             if (selection != null) {
-                Imgproc.drawContours(PaperSheet, Arrays.asList(rows.get(selection[2])), -1, new Scalar(0, 255, 0), 2);
+                Imgproc.drawContours(PaperSheet.submat(roi), Arrays.asList(rows.get(selection[2])), -1, new Scalar(0, 255, 0), 2);
             }
 
             answers.add(selection == null ? null : selection[2]);
@@ -346,35 +453,37 @@ public class AnswerScanner extends AppCompatActivity {
         answers.clear();
         answers.addAll(odds);
         answers.addAll(evens);
+
+        System.out.println ("answer:" + answers);
     }
 
     private class GetAnswerKey extends AsyncTask <Void, Void, String> {
-            private ResponseInterface responseInterface;
+        private ResponseInterface responseInterface;
 
-            public GetAnswerKey(ResponseInterface responseInterface) {
-                this.responseInterface = responseInterface;
-            }
-
-            @Override
-            protected void onPreExecute() {
-                super.onPreExecute();
-            }
-
-            @Override
-            protected void onPostExecute(String s) {
-                super.onPostExecute(s);
-                JSON_STRING = s;
-                showAnswerKey();
-                responseInterface.getResponse(s);
-            }
-
-            @Override
-            protected String doInBackground(Void... params) {
-                RequestHandler rh = new RequestHandler();
-                String s = rh.sendGetRequest(Configuration.URL_GET_ANSWER);
-                return s;
-            }
+        public GetAnswerKey(ResponseInterface responseInterface) {
+            this.responseInterface = responseInterface;
         }
+
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+        }
+
+        @Override
+        protected void onPostExecute(String s) {
+            super.onPostExecute(s);
+            JSON_STRING = s;
+            showAnswerKey();
+            responseInterface.getResponse(s);
+        }
+
+        @Override
+        protected String doInBackground(Void... params) {
+            RequestHandler rh = new RequestHandler();
+            String s = rh.sendGetRequest(Configuration.URL_GET_ANSWER);
+            return s;
+        }
+    }
 
     private void showAnswerKey () {
         correctAnswers = new ArrayList<Integer>();
@@ -402,7 +511,7 @@ public class AnswerScanner extends AppCompatActivity {
             @Override
             protected void onPreExecute() {
                 super.onPreExecute();
-                }
+            }
 
             @Override
             protected void onPostExecute(String s) {
