@@ -32,11 +32,10 @@
             </intent-filter>
         </activity>
         <activity android:name=".PaperScanner" />
-        <activity android:name=".AnswerScanner"></activity>
-
-        <meta-data android:name="com.google.android.gms.vision.DEPENDENCIES"
-            android:value="barcode"></meta-data>
-
+        <activity android:name=".AnswerScanner">
+            <meta-data android:name="com.google.android.gms.vision.DEPENDENCIES"
+                android:value="barcode"/>
+        </activity>
     </application>
 
     <uses-permission android:name="android.permission.INTERNET" />

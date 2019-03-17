@@ -6,10 +6,12 @@ package com.example.brigitta.bub;
 
 public class Configuration {
 
-    public static final String URL_GET_ANSWER = "http://192.168.0.5/thesis/getanswerkey.php";
-    public static final String URL_GET_STD = "http://192.168.0.5/thesis/getname.php?id=";
-    public static final String URL_GET_ALL_STD = "http://192.168.0.5/thesis/getalldata.php?id=";
-    public static final String URL_UPDATE_SCORE = "http://192.168.0.5/thesis/updatescore.php";
+    public static final String URL_GET_ANSWER_MATH = "http://192.168.0.8/thesis/getanswerkey_math.php";
+    public static final String URL_GET_ANSWER_ENGLISH = "....";
+    public static final String URL_GET_STD = "http://192.168.0.8/thesis/getname.php?id=";
+    public static final String URL_GET_ALL_STD = "http://192.168.0.8/thesis/getalldata.php?id=";
+    public static final String URL_UPDATE_SCORE = "http://192.168.0.8/thesis/updatescore.php";
+    public static final String URL_UPDATE_SCORE_MATH = "http://192.168.0.8/thesis/updatescore_math.php";
 
     //Dibawah ini merupakan Kunci yang akan digunakan untuk mengirim permintaan ke Skrip PHP
     public static final String KEY_STD_ID = "id";

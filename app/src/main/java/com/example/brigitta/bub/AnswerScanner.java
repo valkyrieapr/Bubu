@@ -6,11 +6,16 @@ import android.graphics.PixelFormat;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.util.SparseArray;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.google.android.gms.vision.Frame;
+import com.google.android.gms.vision.barcode.Barcode;
+import com.google.android.gms.vision.barcode.BarcodeDetector;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -55,8 +60,8 @@ public class AnswerScanner extends AppCompatActivity {
     private Mat mErode, mGray, mBlur, mThresh, mAdaptiveThresh;
     private String id;
 
-    String name, email, email_id, email_name, email_email, email_status, email_score;
-    Integer FinalScore;
+    String name, email, email_id, email_name, email_email, email_subject, email_status, email_score;  String qrFinalResult; String answerKey, updateScore;
+    Integer FinalScore; Barcode qrResult;
     private String JSON_STRING;
     public interface ResponseInterface {
         public void getResponse(String data);
@@ -117,6 +122,28 @@ public class AnswerScanner extends AppCompatActivity {
 
         findBubbles();
 
+        Imgproc.cvtColor(PaperSheet, PaperSheet, Imgproc.COLOR_BGR2RGB);
+
+        Bitmap Paper = Bitmap.createBitmap(PaperSheet.cols(), PaperSheet.rows(), Bitmap.Config.ARGB_8888);
+        Utils.matToBitmap(PaperSheet, Paper);
+
+        ImageView iv = (ImageView) findViewById(R.id.imageView);
+        iv.setImageBitmap(Paper);
+
+        BarcodeDetector detector = new BarcodeDetector.Builder(getApplicationContext()).setBarcodeFormats(Barcode.QR_CODE).build();
+
+        if(!detector.isOperational()){
+            Toast.makeText(getApplicationContext(), "Could not set up the detector!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Frame frame = new Frame.Builder().setBitmap(Paper).build();
+        SparseArray<Barcode> barcodes = detector.detect(frame);
+
+        qrResult = barcodes.valueAt(0);
+        System.out.println("QR CODE:" + qrResult.rawValue);
+        qrFinalResult = qrResult.rawValue.toString();
+
         findAnswers();
 
         new GetAnswerKey(new ResponseInterface() {
@@ -149,14 +176,6 @@ public class AnswerScanner extends AppCompatActivity {
                 updateScore();
             }
         }).execute();
-
-        Imgproc.cvtColor(PaperSheet, PaperSheet, Imgproc.COLOR_BGR2RGB);
-
-        Bitmap Paper = Bitmap.createBitmap(PaperSheet.cols(), PaperSheet.rows(), Bitmap.Config.ARGB_8888);
-        Utils.matToBitmap(PaperSheet, Paper);
-
-        ImageView iv = (ImageView) findViewById(R.id.imageView);
-        iv.setImageBitmap(Paper);
 
         send = (Button) findViewById(R.id.sendEmailbtn);
         send.setOnClickListener(new View.OnClickListener() {
@@ -247,7 +266,7 @@ public class AnswerScanner extends AppCompatActivity {
                         try {
                             GMailSender sender = new GMailSender("testresult.thesis@Gmail.com", "Brigitta66");
                             sender.sendMail("Test Result",
-                                    "Student Name: " + email_name + "\n" + "Student ID: " + email_id + "\n" + "Test ID: " + "...." + "\n" + "Score: " + email_score + "\n" + "Minimum Score: " + "..." + "\n" + "Status: " + email_status,
+                                    "Student Name: " + email_name + "\n" + "Student ID: " + email_id + "\n" + "Test Subject: " + email_subject + "\n" + "Score: " + email_score + "\n" + "Minimum Score: " + "..." + "\n" + "Status: " + email_status,
                                     "testresult.thesis@Gmail.com", email_email);
 
                         } catch (Exception e) {
@@ -280,6 +299,16 @@ public class AnswerScanner extends AppCompatActivity {
             email_status = c.getString(Configuration.TAG_STATUS);
             email_score = c.getString(Configuration.TAG_SCORE);
 
+            if (Integer.parseInt(email_score) <= 75) {
+                email_status = "FAILED";
+            } else {
+                email_status = "PASSED";
+            }
+
+            if (qrFinalResult.equals("answerkey_mathematics")) {
+                email_subject = "Mathematics";
+            }
+
         } catch (JSONException e) {
             e.printStackTrace();
         }
@@ -303,7 +332,7 @@ public class AnswerScanner extends AppCompatActivity {
         }
 
         //System.out.println ("getParentRectangle > contours.size: " + contours.size());
-       // System.out.println ("getParentRectangle > rectangles.size: " + rectangles.size());
+        // System.out.println ("getParentRectangle > rectangles.size: " + rectangles.size());
 
         //find rectangle done with approxPolyDP
         int parentIndex = -1;
@@ -344,8 +373,8 @@ public class AnswerScanner extends AppCompatActivity {
 
         roi = Imgproc.boundingRect(contours.get(parentIndex));
 
-        System.out.println ("getParentRectangle > original roi.x: " + roi.x + ", roi.y: " + roi.y);
-        System.out.println ("getParentRectangle > original roi.width: " + roi.width + ", roi.height: " + roi.height);
+        //System.out.println ("getParentRectangle > original roi.x: " + roi.x + ", roi.y: " + roi.y);
+        //System.out.println ("getParentRectangle > original roi.width: " + roi.width + ", roi.height: " + roi.height);
 
         int padding = 30;
 
@@ -480,7 +509,12 @@ public class AnswerScanner extends AppCompatActivity {
         @Override
         protected String doInBackground(Void... params) {
             RequestHandler rh = new RequestHandler();
-            String s = rh.sendGetRequest(Configuration.URL_GET_ANSWER);
+            System.out.println("QR Final Result: " + qrFinalResult);
+            if (qrFinalResult.equals("answerkey_mathematics")) {
+                answerKey = Configuration.URL_GET_ANSWER_MATH;
+            }
+            System.out.println("sendGetRequest: " + answerKey);
+            String s = rh.sendGetRequest(answerKey);
             return s;
         }
     }
@@ -524,11 +558,14 @@ public class AnswerScanner extends AppCompatActivity {
                 HashMap <String, String> hashMap = new HashMap<>();
                 hashMap.put(Configuration.KEY_STD_ID, id);
                 hashMap.put(Configuration.KEY_STD_SCORE, score);
-                //System.out.println("Score:" + score);
 
                 RequestHandler rh = new RequestHandler();
-
-                String s = rh.sendPostRequest(Configuration.URL_UPDATE_SCORE, hashMap);
+                System.out.println("QR Final Result: " + qrFinalResult);
+                if (qrFinalResult.equals("answerkey_mathematics")) {
+                    updateScore = Configuration.URL_UPDATE_SCORE_MATH;
+                }
+                System.out.println("sendPostRequest: " + updateScore);
+                String s = rh.sendPostRequest(updateScore, hashMap);
 
                 return s;
             }
