@@ -48,7 +48,7 @@ import static org.opencv.imgproc.Imgproc.boundingRect;
 import static org.opencv.imgproc.Imgproc.getStructuringElement;
 
 public class AnswerScanner extends AppCompatActivity {
-    TextView number; TextView score; Button send;
+    TextView number; TextView score; TextView status; TextView subject; Button send;
     private String[] options = new String[]{"A", "B", "C", "D", "E"};
     private int questionCount = 30;
 
@@ -75,6 +75,8 @@ public class AnswerScanner extends AppCompatActivity {
 
         number = (TextView) findViewById(R.id.studentID);
         score = (TextView) findViewById(R.id.scoreText);
+        status = (TextView) findViewById(R.id.statusText);
+        subject = (TextView) findViewById(R.id.subjectText);
 
         Intent studentIntent1 = getIntent();
         id = studentIntent1.getStringExtra(Configuration.STD_ID);
@@ -112,7 +114,6 @@ public class AnswerScanner extends AppCompatActivity {
         Imgproc.adaptiveThreshold(canny, adaptiveThresh, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 11, 2);
 
         hierarchy = new Mat();
-        System.out.println("first:" + hierarchy);
         contours = new ArrayList<>();
         correctAnswers = new ArrayList<>();
         answers = new ArrayList<>();
@@ -121,6 +122,8 @@ public class AnswerScanner extends AppCompatActivity {
         findParentRectangle();
 
         findBubbles();
+
+        findAnswers();
 
         Imgproc.cvtColor(PaperSheet, PaperSheet, Imgproc.COLOR_BGR2RGB);
 
@@ -144,7 +147,13 @@ public class AnswerScanner extends AppCompatActivity {
         System.out.println("QR CODE:" + qrResult.rawValue);
         qrFinalResult = qrResult.rawValue.toString();
 
-        findAnswers();
+        if (qrFinalResult.equals("answerkey_mathematics")) {
+            subject.setText("Mathematics");
+        }
+
+        if (qrFinalResult.equals("answerkey_english")) {
+            subject.setText("English");
+        }
 
         new GetAnswerKey(new ResponseInterface() {
             @Override
@@ -173,6 +182,12 @@ public class AnswerScanner extends AppCompatActivity {
 
                 score.setText(String.valueOf(FinalScore));
 
+                if (FinalScore <= 75) {
+                    status.setText("FAILED");
+                } else {
+                    status.setText("PASSED");
+                }
+
                 updateScore();
             }
         }).execute();
@@ -187,6 +202,7 @@ public class AnswerScanner extends AppCompatActivity {
             }
         });
 
+        hierarchy.release();
         mErode.release();
         mGray.release();
         mBlur.release();
@@ -200,122 +216,6 @@ public class AnswerScanner extends AppCompatActivity {
         canny.release();
         adaptiveThresh.release();
 
-    }
-
-    private void getStudent(){
-        class GetStudent extends AsyncTask <Void, Void, String> {
-
-            @Override
-            protected void onPreExecute() {
-                super.onPreExecute();
-            }
-
-            @Override
-            protected void onPostExecute(String s) {
-                super.onPostExecute(s);
-                showStudent(s);
-            }
-
-            @Override
-            protected String doInBackground(Void... params) {
-                RequestHandler rh = new RequestHandler();
-                String s = rh.sendGetRequestParam(Configuration.URL_GET_STD, id);
-                return s;
-            }
-        }
-        GetStudent ge = new GetStudent();
-        ge.execute();
-    }
-
-    private void showStudent(String json){
-        try {
-            JSONObject jsonObject = new JSONObject(json);
-            JSONArray result = jsonObject.getJSONArray(Configuration.TAG_JSON_ARRAY);
-
-            JSONObject c = result.getJSONObject(0);
-            name = c.getString(Configuration.TAG_NAME);
-            email = c.getString(Configuration.TAG_EMAIL);
-            if (name == "null") {
-                Toast.makeText(getApplicationContext(), "Student ID is not registered. Please try again.", Toast.LENGTH_SHORT).show();
-                finish();
-                startActivity(new Intent(this, MainActivity.class));
-            } else {
-                System.out.println("Student Name: " + name);
-                number.setText(name);
-            }
-
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void getStudentAllData(){
-        class GetStudentAllData extends AsyncTask <Void,Void,String> {
-            @Override
-            protected void onPreExecute() {
-                super.onPreExecute();
-            }
-
-            @Override
-            protected void onPostExecute(String s) {
-                super.onPostExecute(s);
-                showStudentAllData(s);
-                //System.out.println(s);
-                new Thread(new Runnable() {
-                    public void run() {
-                        try {
-                            GMailSender sender = new GMailSender("testresult.thesis@Gmail.com", "Brigitta66");
-                            sender.sendMail("Test Result",
-                                    "Student Name: " + email_name + "\n" + "Student ID: " + email_id + "\n" + "Test Subject: " + email_subject + "\n" + "Score: " + FinalScore + "\n" + "Minimum Score: " + "75" + "\n" + "Status: " + email_status,
-                                    "testresult.thesis@Gmail.com", email_email);
-
-                        } catch (Exception e) {
-                            Toast.makeText(getApplicationContext(),"Error", Toast.LENGTH_LONG).show();
-                        }
-                    }
-                }).start();
-            }
-
-            @Override
-            protected String doInBackground(Void... params) {
-                RequestHandler rh = new RequestHandler();
-                String s = rh.sendGetRequestParam(Configuration.URL_GET_ALL_STD, id);
-                return s;
-            }
-        }
-        GetStudentAllData gs = new GetStudentAllData();
-        gs.execute();
-    }
-
-
-    private void showStudentAllData(String json){
-        try {
-            JSONObject jsonObject = new JSONObject(json);
-            JSONArray result = jsonObject.getJSONArray(Configuration.TAG_JSON_ARRAY);
-            JSONObject c = result.getJSONObject(0);
-            email_id = c.getString(Configuration.TAG_ID);
-            email_name = c.getString(Configuration.TAG_NAME);
-            email_email = c.getString(Configuration.TAG_EMAIL);
-            email_status = c.getString(Configuration.TAG_STATUS);
-            email_score = c.getString(Configuration.TAG_SCORE);
-
-            if (FinalScore <= 75) {
-                email_status = "FAILED";
-            } else {
-                email_status = "PASSED";
-            }
-
-            if (qrFinalResult.equals("answerkey_mathematics")) {
-                email_subject = "Mathematics";
-            }
-
-            if (qrFinalResult.equals("answerkey_english")) {
-                email_subject = "English";
-            }
-
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
     }
 
     private void findParentRectangle() {
@@ -488,6 +388,122 @@ public class AnswerScanner extends AppCompatActivity {
         answers.addAll(evens);
 
         System.out.println ("answer:" + answers);
+    }
+
+    private void getStudent(){
+        class GetStudent extends AsyncTask <Void, Void, String> {
+
+            @Override
+            protected void onPreExecute() {
+                super.onPreExecute();
+            }
+
+            @Override
+            protected void onPostExecute(String s) {
+                super.onPostExecute(s);
+                showStudent(s);
+            }
+
+            @Override
+            protected String doInBackground(Void... params) {
+                RequestHandler rh = new RequestHandler();
+                String s = rh.sendGetRequestParam(Configuration.URL_GET_STD, id);
+                return s;
+            }
+        }
+        GetStudent ge = new GetStudent();
+        ge.execute();
+    }
+
+    private void showStudent(String json){
+        try {
+            JSONObject jsonObject = new JSONObject(json);
+            JSONArray result = jsonObject.getJSONArray(Configuration.TAG_JSON_ARRAY);
+
+            JSONObject c = result.getJSONObject(0);
+            name = c.getString(Configuration.TAG_NAME);
+            email = c.getString(Configuration.TAG_EMAIL);
+            if (name == "null") {
+                Toast.makeText(getApplicationContext(), "Student ID is not registered. Please try again.", Toast.LENGTH_SHORT).show();
+                finish();
+                startActivity(new Intent(this, MainActivity.class));
+            } else {
+                System.out.println("Student Name: " + name);
+                number.setText(name);
+            }
+
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void getStudentAllData(){
+        class GetStudentAllData extends AsyncTask <Void,Void,String> {
+            @Override
+            protected void onPreExecute() {
+                super.onPreExecute();
+            }
+
+            @Override
+            protected void onPostExecute(String s) {
+                super.onPostExecute(s);
+                showStudentAllData(s);
+                //System.out.println(s);
+                new Thread(new Runnable() {
+                    public void run() {
+                        try {
+                            GMailSender sender = new GMailSender("testresult.thesis@Gmail.com", "Brigitta66");
+                            sender.sendMail("Test Result",
+                                    "Student Name: " + email_name + "\n" + "Student ID: " + email_id + "\n" + "Test Subject: " + email_subject + "\n" + "Score: " + FinalScore + "\n" + "Minimum Score: " + "75" + "\n" + "Status: " + email_status,
+                                    "testresult.thesis@Gmail.com", email_email);
+
+                        } catch (Exception e) {
+                            Toast.makeText(getApplicationContext(),"Error", Toast.LENGTH_LONG).show();
+                        }
+                    }
+                }).start();
+            }
+
+            @Override
+            protected String doInBackground(Void... params) {
+                RequestHandler rh = new RequestHandler();
+                String s = rh.sendGetRequestParam(Configuration.URL_GET_ALL_STD, id);
+                return s;
+            }
+        }
+        GetStudentAllData gs = new GetStudentAllData();
+        gs.execute();
+    }
+
+
+    private void showStudentAllData(String json){
+        try {
+            JSONObject jsonObject = new JSONObject(json);
+            JSONArray result = jsonObject.getJSONArray(Configuration.TAG_JSON_ARRAY);
+            JSONObject c = result.getJSONObject(0);
+            email_id = c.getString(Configuration.TAG_ID);
+            email_name = c.getString(Configuration.TAG_NAME);
+            email_email = c.getString(Configuration.TAG_EMAIL);
+            email_status = c.getString(Configuration.TAG_STATUS);
+            email_score = c.getString(Configuration.TAG_SCORE);
+
+            if (FinalScore <= 75) {
+                email_status = "FAILED";
+            } else {
+                email_status = "PASSED";
+            }
+
+            if (qrFinalResult.equals("answerkey_mathematics")) {
+                email_subject = "Mathematics";
+            }
+
+            if (qrFinalResult.equals("answerkey_english")) {
+                email_subject = "English";
+            }
+
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
     }
 
     private class GetAnswerKey extends AsyncTask <Void, Void, String> {
