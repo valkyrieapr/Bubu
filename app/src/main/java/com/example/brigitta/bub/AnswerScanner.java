@@ -78,16 +78,12 @@ public class AnswerScanner extends AppCompatActivity {
         status = (TextView) findViewById(R.id.statusText);
         subject = (TextView) findViewById(R.id.subjectText);
 
-        Intent studentIntent1 = getIntent();
-        id = studentIntent1.getStringExtra(Configuration.STD_ID);
-        System.out.println("String:" + id);
-
-        getStudent();
-
+        //get Paper Sheet from previous activity and already cropped
         long PaperCopy = getIntent().getLongExtra("PaperSheet", 0);
         Mat TempPaperCopy = new Mat (PaperCopy);
         PaperSheet = TempPaperCopy.clone();
 
+        //to find bubble
         mErode = new Mat();
         Imgproc.erode(PaperSheet, mErode, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, 1)));
         mGray = new Mat();
@@ -99,7 +95,7 @@ public class AnswerScanner extends AppCompatActivity {
         mAdaptiveThresh = new Mat();
         Imgproc.adaptiveThreshold(mBlur, mAdaptiveThresh, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 11, 2);
 
-        //for finding parent rectangle
+        //to find black wrap for parent rectangle
         dilated = new Mat(PaperSheet.size(), CV_8UC1);
         Imgproc.dilate(PaperSheet, dilated, getStructuringElement(Imgproc.MORPH_RECT, new Size(3, 3)));
         gray = new Mat(dilated.size(), CV_8UC1);
@@ -120,77 +116,88 @@ public class AnswerScanner extends AppCompatActivity {
         bubbles = new ArrayList<>();
 
         findParentRectangle();
-
         findBubbles();
-
         findAnswers();
 
         Imgproc.cvtColor(PaperSheet, PaperSheet, Imgproc.COLOR_BGR2RGB);
 
         Bitmap Paper = Bitmap.createBitmap(PaperSheet.cols(), PaperSheet.rows(), Bitmap.Config.ARGB_8888);
         Utils.matToBitmap(PaperSheet, Paper);
-
         ImageView iv = (ImageView) findViewById(R.id.imageView);
         iv.setImageBitmap(Paper);
 
         BarcodeDetector detector = new BarcodeDetector.Builder(getApplicationContext()).setBarcodeFormats(Barcode.QR_CODE).build();
 
-        if(!detector.isOperational()){
+        if (!detector.isOperational()){
             Toast.makeText(getApplicationContext(), "Could not set up the detector!", Toast.LENGTH_SHORT).show();
-            return;
-        }
+            finish();
+            startActivity(new Intent(this, MainActivity.class));
+        } else {
+            Frame frame = new Frame.Builder().setBitmap(Paper).build();
+            SparseArray <Barcode> barcodes = detector.detect(frame);
 
-        Frame frame = new Frame.Builder().setBitmap(Paper).build();
-        SparseArray<Barcode> barcodes = detector.detect(frame);
+            System.out.println("Barcode Size: " + barcodes.size());
 
-        qrResult = barcodes.valueAt(0);
-        System.out.println("QR CODE:" + qrResult.rawValue);
-        qrFinalResult = qrResult.rawValue.toString();
+            if (barcodes.size() == 0) {
+                Toast.makeText(AnswerScanner.this, "Could not detect the QR Code. Try again.", Toast.LENGTH_SHORT).show();
+                finish();
+                startActivity(new Intent(this, MainActivity.class));
+            } else {
+                qrResult = barcodes.valueAt(0);
+                qrFinalResult = qrResult.rawValue.toString();
 
-        if (qrFinalResult.equals("answerkey_mathematics")) {
-            subject.setText("Mathematics");
-        }
-
-        if (qrFinalResult.equals("answerkey_english")) {
-            subject.setText("English");
-        }
-
-        new GetAnswerKey(new ResponseInterface() {
-            @Override
-            public void getResponse(String data) {
-                for (int i = 0; i < answers.size(); i++) {
-                    Integer optionIndex = answers.get(i);
-                    System.out.println ((i + 1) + ". " + (optionIndex == null ? "NULL" : options[optionIndex]));
-                    System.out.println((i + 1) + "a: " + options[correctAnswers.get(i)]);
+                if (qrFinalResult.equals("answerkey_mathematics")) {
+                    subject.setText("Mathematics");
                 }
 
-                if (correctAnswers.size() != answers.size()) {
-                    Toast.makeText(getApplicationContext(), "Number of problem doesn't match.", Toast.LENGTH_SHORT).show();
-                    //error
+                if (qrFinalResult.equals("answerkey_english")) {
+                    subject.setText("English");
                 }
 
-                int correct = 0;
-                for (int j = 0; j < correctAnswers.size(); j++) {
-                    if (answers.get(j) == correctAnswers.get(j)) {
-                        correct ++;
+                new GetAnswerKey(new ResponseInterface() {
+                    @Override
+                    public void getResponse(String data) {
+                        for (int i = 0; i < answers.size(); i++) {
+                            Integer optionIndex = answers.get(i);
+                            System.out.println ((i + 1) + ". " + (optionIndex == null ? "NULL" : options[optionIndex]));
+                            System.out.println((i + 1) + "a: " + options[correctAnswers.get(i)]);
+                        }
+
+                        if (correctAnswers.size() != answers.size()) {
+                            Toast.makeText(getApplicationContext(), "Number of problem doesn't match.", Toast.LENGTH_SHORT).show();
+                            //error
+                        }
+
+                        int correct = 0;
+                        for (int j = 0; j < correctAnswers.size(); j++) {
+                            if (answers.get(j) == correctAnswers.get(j)) {
+                                correct ++;
+                            }
+                        }
+                        FinalScore = correct * 10 / 3;
+                        System.out.println("Correct problems: " + correct);
+                        System.out.println("Total problems: " + correctAnswers.size());
+                        System.out.println("Score: " + FinalScore);
+
+                        score.setText(String.valueOf(FinalScore));
+
+                        if (FinalScore <= 75) {
+                            status.setText("FAILED");
+                        } else {
+                            status.setText("PASSED");
+                        }
+
+                        updateScore();
                     }
-                }
-                FinalScore = correct * 10 / 3;
-                System.out.println("Correct problems: " + correct);
-                System.out.println("Total problems: " + correctAnswers.size());
-                System.out.println("Score: " + FinalScore);
-
-                score.setText(String.valueOf(FinalScore));
-
-                if (FinalScore <= 75) {
-                    status.setText("FAILED");
-                } else {
-                    status.setText("PASSED");
-                }
-
-                updateScore();
+                }).execute();
             }
-        }).execute();
+        }
+
+        //get Student Name from database
+        Intent studentIntent1 = getIntent();
+        id = studentIntent1.getStringExtra(Configuration.STD_ID);
+        System.out.println("Student ID:" + id);
+        getStudent();
 
         send = (Button) findViewById(R.id.sendEmailbtn);
         send.setOnClickListener(new View.OnClickListener() {
@@ -222,7 +229,7 @@ public class AnswerScanner extends AppCompatActivity {
 
         Imgproc.findContours(adaptiveThresh, contours, hierarchy, Imgproc.RETR_TREE, Imgproc.CHAIN_APPROX_SIMPLE);
 
-        System.out.println ("getParentRectangle > hierarchy data:\n" + hierarchy.dump());
+        //System.out.println ("getParentRectangle > hierarchy data:\n" + hierarchy.dump());
 
         // find rectangles
         HashMap<Double, MatOfPoint> rectangles = new HashMap<>();
@@ -234,9 +241,6 @@ public class AnswerScanner extends AppCompatActivity {
                 rectangles.put((double) i, contours.get(i));
             }
         }
-
-        //System.out.println ("getParentRectangle > contours.size: " + contours.size());
-        // System.out.println ("getParentRectangle > rectangles.size: " + rectangles.size());
 
         //find rectangle done with approxPolyDP
         int parentIndex = -1;
@@ -264,21 +268,15 @@ public class AnswerScanner extends AppCompatActivity {
             if (c >= 3){
                 parentIndex = (int) index;
             }
-
-            //System.out.println ("getParentRectangle > index: " + index + ", c: " + c);
-
         }
 
-        //System.out.println ("getParentRectangle > parentIndex: " + parentIndex);
-
-        if(parentIndex < 0){
-            Toast.makeText(getApplicationContext(), "Couldn't capture main wrapper", Toast.LENGTH_SHORT).show();
+        if (parentIndex < 0){
+            Toast.makeText(getApplicationContext(), "Couldn't capture main wrapper.", Toast.LENGTH_SHORT).show();
+            finish();
+            startActivity(new Intent(this, MainActivity.class));
         }
 
         roi = Imgproc.boundingRect(contours.get(parentIndex));
-
-        //System.out.println ("getParentRectangle > original roi.x: " + roi.x + ", roi.y: " + roi.y);
-        //System.out.println ("getParentRectangle > original roi.width: " + roi.width + ", roi.height: " + roi.height);
 
         int padding = 30;
 
@@ -293,49 +291,60 @@ public class AnswerScanner extends AppCompatActivity {
     private void findBubbles() {
 
         contours.clear();
-
         Imgproc.findContours(mAdaptiveThresh.submat(roi), contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
+        System.out.println("Contours Size: " + mAdaptiveThresh.submat(roi).size());
 
-        List<MatOfPoint> drafts = new ArrayList<>();
-        //To determine which regions of the image are bubbles, we first loop over each of the individual contours.
-        for (MatOfPoint contour : contours) {
-            //Compute the bounding box of the contour, then use the bounding box to derive the aspect ratio
-            Rect box = boundingRect(contour);
-            int w = box.width;
-            int h = box.height;
-            double ratio = Math.max(w, h) / Math.min(w, h);
+        if (contours.size() == 0) {
+            Toast.makeText(getApplicationContext(), "Couldn't detect bubbles. Try again.", Toast.LENGTH_SHORT).show();
+            finish();
+            startActivity(new Intent(this, MainActivity.class));
+        } else {
+            List<MatOfPoint> drafts = new ArrayList<>();
+            //To determine which regions of the image are bubbles, we first loop over each of the individual contours.
+            for (MatOfPoint contour : contours) {
+                //Compute the bounding box of the contour, then use the bounding box to derive the aspect ratio
+                Rect box = boundingRect(contour);
+                int w = box.width;
+                int h = box.height;
+                double ratio = Math.max(w, h) / Math.min(w, h);
 
-            //In order for a contour area to be considered a bubble, the region should:
-            //1. Be sufficiently wide and tall (in this case, at least 20-30 pixels in both dimensions).
-            //2. Have an aspect ratio that is approximately equal to 1.
-            //As long as these checks hold, we can update our drafts list and mark the region as a bubble.
+                //In order for a contour area to be considered a bubble, the region should:
+                //1. Be sufficiently wide and tall (in this case, at least 20-30 pixels in both dimensions).
+                //2. Have an aspect ratio that is approximately equal to 1.
+                //As long as these checks hold, we can update our drafts list and mark the region as a bubble.
 
-            if (ratio >= 0.9 && ratio <= 1.1) {
-                if(Math.max(w, h) < 30 && Math.min(w, h) > 20){
-                    drafts.add(contour);
-                    //Imgproc.drawContours(PaperSheet, contours, contours.indexOf(contour), new Scalar(0, 0, 255), 1);
+                if (ratio >= 0.9 && ratio <= 1.1) {
+                    if(Math.max(w, h) < 30 && Math.min(w, h) > 20){
+                        drafts.add(contour);
+                        //Imgproc.drawContours(PaperSheet, contours, contours.indexOf(contour), new Scalar(0, 0, 255), 1);
+                    }
                 }
             }
-        }
 
-        if(drafts.size() != questionCount * options.length){
-            Toast.makeText(getApplicationContext(), "Couldn't capture all bubbles. Try again. ", Toast.LENGTH_SHORT).show();
-        }
+            if(drafts.size() != questionCount * options.length) {
+                Toast.makeText(getApplicationContext(), "Couldn't capture all bubbles. Try again.", Toast.LENGTH_SHORT).show();
+                finish();
+                startActivity(new Intent(this, MainActivity.class));
 
-        //First, we must sort our drafts from top-to-bottom.
-        // This will ensure that rows of questions that are closer to the top of the exam will appear first in the sorted list.
-        sortTopLeft2BottomRight(drafts);
+            } else {
 
-        bubbles = new ArrayList<>();
+                //First, we must sort our drafts from top-to-bottom.
+                // This will ensure that rows of questions that are closer to the top of the exam will appear first in the sorted list.
+                sortTopLeft2BottomRight(drafts);
 
-        //The reason this methodology works is because we have already sorted our contours from top-to-bottom.
-        //We know that the 5 bubbles for each question will appear sequentially in our list — but we do not know whether these bubbles will be sorted from left-to-right.
-        //Each question has 5 possible answers.
-        //Sort the current set of contours from left to right.
-        for (int j = 0; j < drafts.size(); j += options.length * 2) {
-            List<MatOfPoint> row = drafts.subList(j, j + options.length * 2);
-            sortLeft2Right(row);
-            bubbles.addAll(row);
+                bubbles = new ArrayList<>();
+
+                //The reason this methodology works is because we have already sorted our contours from top-to-bottom.
+                //We know that the 5 bubbles for each question will appear sequentially in our list — but we do not know whether these bubbles will be sorted from left-to-right.
+                //Each question has 5 possible answers.
+                //Sort the current set of contours from left to right.
+                for (int j = 0; j < drafts.size(); j += options.length * 2) {
+                    List<MatOfPoint> row = drafts.subList(j, j + options.length * 2);
+                    sortLeft2Right(row);
+                    bubbles.addAll(row);
+                }
+
+            }
         }
     }
 
@@ -387,7 +396,7 @@ public class AnswerScanner extends AppCompatActivity {
         answers.addAll(odds);
         answers.addAll(evens);
 
-        System.out.println ("answer:" + answers);
+        System.out.println ("Answer Size:" + answers.size());
     }
 
     private void getStudent(){
@@ -424,7 +433,7 @@ public class AnswerScanner extends AppCompatActivity {
             name = c.getString(Configuration.TAG_NAME);
             email = c.getString(Configuration.TAG_EMAIL);
             if (name == "null") {
-                Toast.makeText(getApplicationContext(), "Student ID is not registered. Please try again.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), "Student ID is not registered. Try again.", Toast.LENGTH_SHORT).show();
                 finish();
                 startActivity(new Intent(this, MainActivity.class));
             } else {
@@ -530,6 +539,7 @@ public class AnswerScanner extends AppCompatActivity {
         protected String doInBackground(Void... params) {
             RequestHandler rh = new RequestHandler();
             System.out.println("QR Final Result: " + qrFinalResult);
+
 
             if (qrFinalResult.equals("answerkey_mathematics")) {
                 answerKey = Configuration.URL_GET_ANSWER_MATH;
