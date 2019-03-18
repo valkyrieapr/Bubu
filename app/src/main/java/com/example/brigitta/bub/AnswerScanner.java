@@ -266,7 +266,7 @@ public class AnswerScanner extends AppCompatActivity {
                         try {
                             GMailSender sender = new GMailSender("testresult.thesis@Gmail.com", "Brigitta66");
                             sender.sendMail("Test Result",
-                                    "Student Name: " + email_name + "\n" + "Student ID: " + email_id + "\n" + "Test Subject: " + email_subject + "\n" + "Score: " + email_score + "\n" + "Minimum Score: " + "..." + "\n" + "Status: " + email_status,
+                                    "Student Name: " + email_name + "\n" + "Student ID: " + email_id + "\n" + "Test Subject: " + email_subject + "\n" + "Score: " + FinalScore + "\n" + "Minimum Score: " + "75" + "\n" + "Status: " + email_status,
                                     "testresult.thesis@Gmail.com", email_email);
 
                         } catch (Exception e) {
@@ -299,7 +299,7 @@ public class AnswerScanner extends AppCompatActivity {
             email_status = c.getString(Configuration.TAG_STATUS);
             email_score = c.getString(Configuration.TAG_SCORE);
 
-            if (Integer.parseInt(email_score) <= 75) {
+            if (FinalScore <= 75) {
                 email_status = "FAILED";
             } else {
                 email_status = "PASSED";
@@ -307,6 +307,10 @@ public class AnswerScanner extends AppCompatActivity {
 
             if (qrFinalResult.equals("answerkey_mathematics")) {
                 email_subject = "Mathematics";
+            }
+
+            if (qrFinalResult.equals("answerkey_english")) {
+                email_subject = "English";
             }
 
         } catch (JSONException e) {
@@ -510,9 +514,15 @@ public class AnswerScanner extends AppCompatActivity {
         protected String doInBackground(Void... params) {
             RequestHandler rh = new RequestHandler();
             System.out.println("QR Final Result: " + qrFinalResult);
+
             if (qrFinalResult.equals("answerkey_mathematics")) {
                 answerKey = Configuration.URL_GET_ANSWER_MATH;
             }
+
+            if (qrFinalResult.equals("answerkey_english")) {
+                answerKey = Configuration.URL_GET_ANSWER_ENGLISH;
+            }
+
             System.out.println("sendGetRequest: " + answerKey);
             String s = rh.sendGetRequest(answerKey);
             return s;
@@ -564,6 +574,11 @@ public class AnswerScanner extends AppCompatActivity {
                 if (qrFinalResult.equals("answerkey_mathematics")) {
                     updateScore = Configuration.URL_UPDATE_SCORE_MATH;
                 }
+
+                if (qrFinalResult.equals("answerkey_english")) {
+                    updateScore = Configuration.URL_UPDATE_SCORE_ENGLISH;
+                }
+
                 System.out.println("sendPostRequest: " + updateScore);
                 String s = rh.sendPostRequest(updateScore, hashMap);
 
