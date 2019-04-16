@@ -34,6 +34,8 @@
         <activity android:name=".PaperScanner" />
         <activity android:name=".AnswerScanner">
             <meta-data android:name="com.google.android.gms.vision.DEPENDENCIES"
+                android:hardwareAccelerated="true"
+                android:launchMode="singleTask"
                 android:value="barcode"/>
         </activity>
     </application>

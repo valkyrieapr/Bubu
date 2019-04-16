@@ -49,13 +49,15 @@ import java.util.List;
 
 public class PaperScanner extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2 {
     private static final String TAG = "MainActivity";
+    private boolean runScanner = false, paperFound = false;
     CameraBridgeViewBase cameraBridgeViewBase;
-    Mat mRgba, mRgbaFiltered, mRgbaFilteredCanny, mRgbaT, mRgbaF;
-    private boolean runScanner = false, rectFound = false;
     private Button btnStart;
-    Handler handler;
-    int intValue;
+    Mat mRgba, mGray, mGaussianBlur, mCanny, hierarchy;
     String studentID;
+    List<MatOfPoint> contours;
+    List<Point> curves;
+    MatOfPoint2f maxCurve, approxCurve, src;
+    double maxArea;
 
     private BaseLoaderCallback baseLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -63,7 +65,7 @@ public class PaperScanner extends AppCompatActivity implements CameraBridgeViewB
             switch (status) {
                 case LoaderCallbackInterface.SUCCESS:
                 {
-                    Log.i(TAG, "OpenCV loaded successfully");
+                    Log.i(TAG, "PAPERSCANNER >>>> OpenCV loaded successfully.");
                     cameraBridgeViewBase.enableView();
                 } break;
                 default:
@@ -83,20 +85,42 @@ public class PaperScanner extends AppCompatActivity implements CameraBridgeViewB
         btnStart = (Button) findViewById(R.id.btn_str);
         cameraBridgeViewBase = (JavaCameraView)findViewById(R.id.show_camera_activity_java_surface_view);
         cameraBridgeViewBase.setVisibility(SurfaceView.VISIBLE);
+        //cameraBridgeViewBase.setMaxFrameSize(800, 600);
         cameraBridgeViewBase.setMaxFrameSize(1280, 720);
         cameraBridgeViewBase.setCvCameraViewListener(this);
+
+        Intent studentIntent = getIntent();
+        studentID = studentIntent.getExtras().getString(Configuration.STD_ID);
+
+        System.out.println("PAPERSCANNER >>>> Student ID:" + studentID);
 
         btnStart.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent studentIntent = getIntent();
-                //intValue = studentIntent.getIntExtra("StudentID", 0);
-                studentID = studentIntent.getExtras().getString(Configuration.STD_ID);
-
-                runScanner = true;
+                try {
+                    if (maxArea == 0) {
+                        System.out.println("PAPERSCANNER >>>> Answer sheet is not detected.");
+                    } else {
+                        runScanner = true;
+                    }
+                } catch (Exception e) {
+                    System.out.println("PAPERSCANNER >>>> Error " + e.getMessage());
+                }
             }
         });
     }
+
+    // This method is invoked when target activity return result data back.
+    /*@Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent dataIntent) {
+        super.onActivityResult(requestCode, resultCode, dataIntent);
+        if (requestCode == 1) {
+            if(resultCode == RESULT_OK){
+                studentIDback = dataIntent.getExtras().getString(Configuration.STD_ID);
+                System.out.println("PAPERSCANNER >>>> STRINGGG: " + studentID);
+            }
+        }
+    }*/
 
     @Override
     protected void onPause() {
@@ -116,10 +140,10 @@ public class PaperScanner extends AppCompatActivity implements CameraBridgeViewB
     protected void onResume() {
         super.onResume();
         if (!OpenCVLoader.initDebug()) {
-            Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
+            Log.d(TAG, "PAPERSCANNER >>>> Internal OpenCV library not found. Using OpenCV Manager for initialization");
             OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, baseLoaderCallback);
         } else {
-            Log.d(TAG, "OpenCV library found inside package. Using it!");
+            Log.d(TAG, "PAPERSCANNER >>>> OpenCV library found inside package. Using it!");
             baseLoaderCallback.onManagerConnected(BaseLoaderCallback.SUCCESS);
         }
     }
@@ -127,35 +151,37 @@ public class PaperScanner extends AppCompatActivity implements CameraBridgeViewB
     @Override
     public void onCameraViewStarted(int width, int height) {
         mRgba = new Mat();
-        mRgbaFiltered = new Mat();
-        mRgbaFilteredCanny = new Mat();
+        hierarchy = new Mat();
+        mGray = new Mat();
+        mGaussianBlur = new Mat();
+        mCanny = new Mat();
     }
 
     @Override
     public void onCameraViewStopped() {
         mRgba.release();
-        mRgbaFiltered.release();
-        mRgbaFilteredCanny.release();
+        hierarchy.release();
+        mGray.release();
+        mGaussianBlur.release();
+        mCanny.release();
     }
 
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-        Mat mGray = inputFrame.gray();
         Mat mRgba = inputFrame.rgba();
+        //Imgproc.putText(mRgba, studentID, new Point(10, 30),Core.FONT_HERSHEY_PLAIN,1, new Scalar(0, 255, 0), 2);
 
-        Imgproc.GaussianBlur(mGray, mRgbaFiltered, new Size(5, 5), 0);
-        Imgproc.Canny(mRgbaFiltered, mRgbaFilteredCanny, 75, 200);
+        contours = new ArrayList<MatOfPoint>();
 
-        //find the contours
-        List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
-        Mat hierarchy = new Mat();
-        Imgproc.findContours(mRgbaFilteredCanny, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
-        hierarchy.release();
+        Imgproc.cvtColor(mRgba, mGray, Imgproc.COLOR_BGR2GRAY);
+        Imgproc.GaussianBlur(mGray, mGaussianBlur, new Size(5, 5), 0);
+        Imgproc.Canny(mGaussianBlur, mCanny, 75, 200);
+        Imgproc.findContours(mCanny, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
 
-        double maxArea = 1000;
+        maxArea = 0;
         int maxAreaIdx = 0;
-        MatOfPoint2f approxCurve = new MatOfPoint2f();
-        MatOfPoint2f maxCurve = new MatOfPoint2f();
+        approxCurve = new MatOfPoint2f();
+        maxCurve = new MatOfPoint2f();
 
         for (MatOfPoint contour : contours) {
             double contourArea = Imgproc.contourArea(contour);
@@ -169,90 +195,71 @@ public class PaperScanner extends AppCompatActivity implements CameraBridgeViewB
                 //Page has 4 corners and it is convex
                 if (approxCurve.total() == 4) {
                     double maxCosine = 0;
-                    List<Point> curves = approxCurve.toList();
+                    curves = approxCurve.toList();
 
                     for (int j = 2; j < 5; j++) {
                         double cosine = Math.abs(angle(curves.get(j % 4), curves.get(j - 2), curves.get(j - 1)));
                         maxCosine = Math.max(maxCosine, cosine);
                     }
 
-                    if (maxCosine < 0.3 && approxCurve.total() == 4) {
+                    if (maxCosine < 0.3) {
                         maxCurve = approxCurve;
                         maxArea = contourArea;
                         maxAreaIdx = contours.indexOf(contour);
-
-                        rectFound = true;
-                    } else {
-                        rectFound = false;
+                        Imgproc.drawContours(mRgba, contours, maxAreaIdx, new Scalar(8, 255, 0), 2); //will draw the largest square/rectangle
                     }
                 }
             }
         }
 
-        if (rectFound == true) {
-            Imgproc.drawContours(mRgba, contours, maxAreaIdx, new Scalar(8, 255, 0), 1); //will draw the largest square/rectangle
-            //Imgproc.putText(mRgba, "Rectangle is detected.", new Point(10, 30),Core.FONT_HERSHEY_PLAIN,1, new Scalar(0, 255, 0), 2);
+        if (runScanner) {
+            Point[] sortedPoints = new Point[4];
+            Moments moment = Imgproc.moments(maxCurve);
+            int x = (int) (moment.get_m10() / moment.get_m00());
+            int y = (int) (moment.get_m01() / moment.get_m00());
 
-            if (runScanner) {
-                contours.clear();
-
-                Point[] sortedPoints = new Point[4];
-                Moments moment = Imgproc.moments(maxCurve);
-                int x = (int) (moment.get_m10() / moment.get_m00());
-                int y = (int) (moment.get_m01() / moment.get_m00());
-
-                double[] data;
-                int count = 0;
-                for (int i = 0; i < maxCurve.rows(); i++) {
-                    data = maxCurve.get(i, 0);
-                    double datax = data[0];
-                    double datay = data[1];
-                    if (datax < x && datay > y) { //top-left
-                        sortedPoints[0] = new Point(datax, datay);
-                        count++;
-                    } else if (datax > x && datay > y) { //top-right
-                        sortedPoints[1] = new Point(datax, datay);
-                        count++;
-                    } else if (datax > x && datay < y) { //bottom-right
-                        sortedPoints[2] = new Point(datax, datay);
-                        count++;
-                    } else if (datax < x && datay < y) { //bottom-left
-                        sortedPoints[3] = new Point(datax, datay);
-                        count++;
-                    }
+            double[] data;
+            int count = 0;
+            for (int i = 0; i < maxCurve.rows(); i++) {
+                data = maxCurve.get(i, 0);
+                double datax = data[0];
+                double datay = data[1];
+                if (datax < x && datay > y) { //top-left
+                    sortedPoints[0] = new Point(datax, datay);
+                    count++;
+                } else if (datax > x && datay > y) { //top-right
+                    sortedPoints[1] = new Point(datax, datay);
+                    count++;
+                } else if (datax > x && datay < y) { //bottom-right
+                    sortedPoints[2] = new Point(datax, datay);
+                    count++;
+                } else if (datax < x && datay < y) { //bottom-left
+                    sortedPoints[3] = new Point(datax, datay);
+                    count++;
                 }
-
-                MatOfPoint2f src = new MatOfPoint2f(sortedPoints[0], sortedPoints[1], sortedPoints[2], sortedPoints[3]);
-
-                Mat Paper = PaperWarp(mRgba, src);
-                long PaperCopy = Paper.getNativeObjAddr();
-                Intent intent = new Intent(this, AnswerScanner.class);
-                intent.putExtra("PaperSheet", PaperCopy);
-
-                intent.putExtra(Configuration.STD_ID, studentID);
-
-                startActivity(intent);
-
-                mRgbaFiltered.release();
-                mRgbaFilteredCanny.release();
             }
 
-        } else {
-            //Imgproc.putText(mRgba, "Rectangle is not detected.", new Point(10, 30),Core.FONT_HERSHEY_PLAIN,1, new Scalar(255, 0, 0), 2);
+            src = new MatOfPoint2f(sortedPoints[0], sortedPoints[1], sortedPoints[2], sortedPoints[3]);
 
-            if (runScanner) {
-                contours.clear();
-                mRgbaFiltered.release();
-                mRgbaFilteredCanny.release();
-                Intent intent2 = getIntent();
-                finish();
-                startActivity(intent2);
-            }
+            contours.clear();
+            hierarchy.release();
+            mGray.release();
+            mGaussianBlur.release();
+            mCanny.release();
+
+            Mat AnswerSheet = paperWarp(mRgba, src);
+            long AnswerSheetCopy = AnswerSheet.getNativeObjAddr();
+
+            Intent intent = new Intent(getApplicationContext(), AnswerScanner.class);
+            intent.putExtra("AnswerSheet", AnswerSheetCopy);
+            intent.putExtra(Configuration.STD_ID, studentID);
+            startActivity(intent);
         }
+        System.gc();
         return mRgba;
     }
 
-    public static Mat PaperWarp(Mat mRgba, Mat src) {
+    public static Mat paperWarp(Mat mRgba, Mat src) {
         int resultWidth = 840;
         int resultHeight = 1188;
 
@@ -281,14 +288,11 @@ public class PaperScanner extends AppCompatActivity implements CameraBridgeViewB
         return (dx1 * dx2 + dy1 * dy2) / Math.sqrt((dx1 * dx1 + dy1 * dy1) * (dx2 * dx2 + dy2 * dy2) + 1e-10);
     }
 
-    private void initMe() {
-        handler = new Handler();
-    }
-
     @Override
     public void onBackPressed() {
+        Intent backIntent = new Intent(PaperScanner.this, MainActivity.class);
+        backIntent.putExtra(Configuration.STD_ID, studentID);
+        startActivity(backIntent);
         finish();
-        super.onBackPressed();
-        //implement crash reload
     }
 }
